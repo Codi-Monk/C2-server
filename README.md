@@ -127,15 +127,19 @@ curl -X POST http://localhost:3000/api/auth/register \
 
 ---
 
-## Render.com Deployment
+## Railway Deployment
 
-1. Push this repo to GitHub.
-2. In Render dashboard → **New Blueprint** → point to your repo.
-3. Render reads `render.yaml` and creates the Web Service + Postgres database automatically.
-4. Set `ALLOWED_ORIGINS` to your deployed Next.js dashboard URL.
-5. Run database migrations via the Render shell: `npm run db:migrate`.
+The server is designed for zero-config deployment on **Railway**:
 
-**Important**: `PORT` and `DATABASE_URL` are injected by Render automatically — do not hardcode them.
+1. Push this repo to GitHub
+2. Railway → **New Project** → Deploy from GitHub
+3. Add PostgreSQL database service
+4. Set environment variables (see `RAILWAY_DEPLOYMENT.md`)
+5. Deploy automatically on every `git push`
+
+**Full guide:** See [`RAILWAY_DEPLOYMENT.md`](./RAILWAY_DEPLOYMENT.md)
+
+**Important:** Set your start command to `npm run railway:start` in Railway settings to auto-run migrations on deploy.
 
 ---
 
