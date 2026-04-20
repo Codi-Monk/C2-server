@@ -47,6 +47,12 @@ const authenticateAdmin = (socket) => {
  */
 const registerSockets = (io) => {
   // ══════════════════════════════════════════════════════════════════════════
+  // AGENT SOCKET REGISTRY
+  // Maps agent_id → socket for active tasking command routing
+  // ══════════════════════════════════════════════════════════════════════════
+  const agentSockets = new Map();
+
+  // ══════════════════════════════════════════════════════════════════════════
   // /agent NAMESPACE — Python Agent connections
   // ══════════════════════════════════════════════════════════════════════════
   const agentNs = io.of('/agent');
@@ -74,6 +80,10 @@ const registerSockets = (io) => {
       hostname: agent.hostname,
       socketId: socket.id,
     });
+
+    // ═══ Register agent socket for active tasking ══════════════════════════
+    agentSockets.set(agent.id, socket);
+    logger.debug('Agent socket registered for tasking', { agentId: agent.id });
 
     // Mark agent as online
     await prisma.agent.update({
@@ -163,9 +173,47 @@ const registerSockets = (io) => {
       }
     });
 
+    // ══════════════════════════════════════════════════════════════════════
+    // ── task_result ────────────────────────────────────────────────────────
+    // Active tasking: agent returns result of a command execution
+    // Route this back to the /admin namespace
+    // ══════════════════════════════════════════════════════════════════════
+    socket.on('task_result', (data) => {
+      try {
+        const { task_id, result } = data || {};
+
+        if (!task_id || !result) {
+          logger.warn('Agent sent invalid task_result', { agentId: agent.id, hasTaskId: !!task_id, hasResult: !!result });
+          return;
+        }
+
+        logger.info('Task result received from agent', {
+          agentId: agent.id,
+          taskId: task_id,
+          success: result.success,
+        });
+
+        // Broadcast to all connected admin dashboards
+        // (They filter by task_id client-side)
+        io.of('/admin').emit('task_result', {
+          agent_id: agent.id,
+          task_id,
+          result,
+          timestamp: new Date().toISOString(),
+        });
+
+      } catch (err) {
+        logger.error('Error handling task_result', { agentId: agent.id, error: err.message });
+      }
+    });
+
     // ── disconnect ─────────────────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info('Agent disconnected', { agentId: agent.id, hostname: agent.hostname, reason });
+
+      // ═══ Unregister from tasking map ════════════════════════════════════
+      agentSockets.delete(agent.id);
+      logger.debug('Agent socket unregistered from tasking', { agentId: agent.id });
 
       try {
         await prisma.agent.update({
@@ -223,6 +271,117 @@ const registerSockets = (io) => {
 
     socket.on('unsubscribe_agent', (agentId) => {
       socket.leave(`agent:${agentId}`);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTIVE TASKING COMMANDS
+    // Admin sends commands → route to specific agent in /agent namespace
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Helper: Route a command to a specific agent
+     */
+    const routeToAgent = (agentId, eventName, payload) => {
+      const agentSocket = agentSockets.get(agentId);
+
+      if (!agentSocket || !agentSocket.connected) {
+        logger.warn('Cannot route command: agent offline or not found', { agentId, eventName });
+        // Send error back to admin
+        socket.emit('task_error', {
+          task_id: payload.task_id,
+          error: 'Agent is offline or disconnected',
+          agent_id: agentId,
+        });
+        return false;
+      }
+
+      logger.info('Routing task command to agent', {
+        adminId: admin.id,
+        agentId,
+        eventName,
+        taskId: payload.task_id,
+      });
+
+      agentSocket.emit(eventName, payload);
+      return true;
+    };
+
+    // ── execute_command ────────────────────────────────────────────────────
+    socket.on('execute_command', (data) => {
+      const { agent_id, task_id, command } = data || {};
+
+      if (!agent_id || !task_id || !command) {
+        logger.warn('execute_command: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id, task_id, or command' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'execute_command', { task_id, command });
+    });
+
+    // ── list_directory ─────────────────────────────────────────────────────
+    socket.on('list_directory', (data) => {
+      const { agent_id, task_id, path } = data || {};
+
+      if (!agent_id || !task_id || !path) {
+        logger.warn('list_directory: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id, task_id, or path' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'list_directory', { task_id, path });
+    });
+
+    // ── download_file ──────────────────────────────────────────────────────
+    socket.on('download_file', (data) => {
+      const { agent_id, task_id, path } = data || {};
+
+      if (!agent_id || !task_id || !path) {
+        logger.warn('download_file: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id, task_id, or path' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'download_file', { task_id, path });
+    });
+
+    // ── upload_file ────────────────────────────────────────────────────────
+    socket.on('upload_file', (data) => {
+      const { agent_id, task_id, path, data: fileData } = data || {};
+
+      if (!agent_id || !task_id || !path || !fileData) {
+        logger.warn('upload_file: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id, task_id, path, or data' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'upload_file', { task_id, path, data: fileData });
+    });
+
+    // ── list_processes ─────────────────────────────────────────────────────
+    socket.on('list_processes', (data) => {
+      const { agent_id, task_id } = data || {};
+
+      if (!agent_id || !task_id) {
+        logger.warn('list_processes: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id or task_id' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'list_processes', { task_id });
+    });
+
+    // ── kill_process ───────────────────────────────────────────────────────
+    socket.on('kill_process', (data) => {
+      const { agent_id, task_id, pid, force } = data || {};
+
+      if (!agent_id || !task_id || !pid) {
+        logger.warn('kill_process: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id, task_id, or pid' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'kill_process', { task_id, pid, force: !!force });
     });
 
     socket.on('disconnect', (reason) => {
