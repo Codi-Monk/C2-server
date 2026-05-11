@@ -383,6 +383,18 @@ const registerSockets = (io) => {
 
       routeToAgent(agent_id, 'kill_process', { task_id, pid, force: !!force });
     });
+    
+    socket.on('run_custom_script', (data) => {
+      const { agent_id, task_id } = data || {};
+
+      if (!agent_id || !task_id) {
+        logger.warn('run_custom_script: missing required fields', { adminId: admin.id });
+        socket.emit('task_error', { task_id, error: 'Missing agent_id or task_id' });
+        return;
+      }
+
+      routeToAgent(agent_id, 'run_custom_script', { task_id });
+    });
 
     socket.on('disconnect', (reason) => {
       logger.info('Admin dashboard disconnected', { adminId: admin.id, reason });
