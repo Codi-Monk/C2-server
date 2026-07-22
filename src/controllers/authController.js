@@ -27,7 +27,8 @@ const login = async (req, res, next) => {
     const admin = await prisma.admin.findUnique({ where: { email } });
 
     // Constant-time comparison avoids timing attacks even on unknown emails
-    const dummyHash = '$2b$12$invalidhashfortimingprotection000000000000000000000000';
+    // A real bcrypt hash of the word "dummy"
+    const dummyHash = '$2a$12$R9h/cIPz0gi.URNNX3ck2OPST9O9LyWIGnOmuf9qpe12Scdq7JvWm';
     const isValid = admin
       ? await bcrypt.compare(password, admin.password_hash)
       : await bcrypt.compare(password, dummyHash).then(() => false);

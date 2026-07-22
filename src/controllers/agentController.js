@@ -12,9 +12,9 @@ const logger = require('../utils/logger');
  */
 const registerAgent = async (req, res, next) => {
   try {
-    const { hostname, ip_address, os_info } = req.body;
+    const { hostname, os_info } = req.body;
 
-    if (!hostname || !ip_address) {
+    if (!hostname) {
       return res.status(400).json({
         error: 'Bad Request',
         message: '`hostname` and `ip_address` are required.',

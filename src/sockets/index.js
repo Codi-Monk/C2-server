@@ -212,7 +212,9 @@ const registerSockets = (io) => {
       logger.info('Agent disconnected', { agentId: agent.id, hostname: agent.hostname, reason });
 
       // ═══ Unregister from tasking map ════════════════════════════════════
-      agentSockets.delete(agent.id);
+      if (agentSockets.get(agent.id) === socket) {
+    agentSockets.delete(agent.id);
+  }
       logger.debug('Agent socket unregistered from tasking', { agentId: agent.id });
 
       try {
