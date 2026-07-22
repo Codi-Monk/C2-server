@@ -12,15 +12,7 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-// --- TEMPORARY ADMIN INJECTION ---
-prisma.admin.upsert({
-  where: { email: 'admin@monk.com' },
-  update: { password: '$2a$12$qK4v1fZwSz11xXQ1ECcpVejxDdoCExVpu5jHZTInB1gKKEqeZqTN6' }, // <-- PASTE HASH HERE
-  create: { email: 'admin@monk.com', password: '$2a$12$qK4v1fZwSz11xXQ1ECcpVejxDdoCExVpu5jHZTInB1gKKEqeZqTN6' } // <-- AND HERE
-})
-.then(() => console.log("🔥 INJECTION SUCCESS: Admin account created!"))
-.catch((err) => console.error("INJECTION FAILED:", err));
-// ----------------------------------
+
 
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL || 'admin@rmm.local';
