@@ -79,24 +79,6 @@ const io = new SocketIOServer(httpServer, {
 });
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
-
-// --- TEMPORARY SETUP ROUTE (Must be ABOVE createRouter!) ---
-app.get('/setup-admin', async (req, res) => {
-  try {
-    await prisma.admin.upsert({
-      where: { email: 'admin@monk.com' },
-      // FIX: Changed "password" to "password_hash" to match Prisma schema
-      update: { password_hash: '$2a$12$qK4v1fZwSz11xXQ1ECcpVejxDdoCExVpu5jHZTInB1gKKEqeZqTN6' },
-      create: { email: 'admin@monk.com', password_hash: '$2a$12$qK4v1fZwSz11xXQ1ECcpVejxDdoCExVpu5jHZTInB1gKKEqeZqTN6' }
-    });
-    res.send("🔥 INJECTION SUCCESS: You can now log in!");
-  } catch (error) {
-    res.status(500).send("ERROR: " + error.message);
-  }
-});
-// -----------------------------------------------------------
-
-
 // Routes need `io` so controllers can broadcast to /admin namespace
 app.use('/', createRouter(io));
 
