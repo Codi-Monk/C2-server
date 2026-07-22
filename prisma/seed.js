@@ -1,7 +1,7 @@
 // prisma/seed.js
 // Run with: npx prisma db seed
-// Creates the initial superadmin account on first deploy.
-// Reads credentials from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD env vars.
+// Upserts the superadmin account. 
+// If the email exists, it updates the password to match your .env variable.
 
 'use strict';
 
@@ -11,8 +11,6 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
-
-
 
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL || 'admin@rmm.local';
@@ -28,20 +26,18 @@ async function main() {
     throw new Error('SEED_ADMIN_PASSWORD must be at least 12 characters.');
   }
 
-  const existing = await prisma.admin.findUnique({ where: { email } });
-  if (existing) {
-    console.log(`ℹ️  Superadmin '${email}' already exists — skipping.`);
-    return;
-  }
-
+  // Hash the password from the .env file
   const password_hash = await bcrypt.hash(password, 12);
 
-  const admin = await prisma.admin.create({
-    data: { email, password_hash, role: 'superadmin' },
+  // Upsert: Update if exists, Create if it does not
+  const admin = await prisma.admin.upsert({
+    where: { email },
+    update: { password_hash, role: 'superadmin' },
+    create: { email, password_hash, role: 'superadmin' },
     select: { id: true, email: true, role: true },
   });
 
-  console.log(`✅ Superadmin created: ${admin.email} (id: ${admin.id})`);
+  console.log(`✅ Superadmin synced (created or password updated): ${admin.email} (id: ${admin.id})`);
 }
 
 main()
